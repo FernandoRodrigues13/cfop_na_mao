@@ -1,10 +1,11 @@
-// lib/detail_page.dart (VERSÃO COM NAVEGAÇÃO NOS RELACIONADOS)
+// lib/detail_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:vibration/vibration.dart'; // Importa o pacote de vibração
 import 'cfop_model.dart';
 import 'database_service.dart';
-import 'main.dart'; // Importa para acessar a instância global 'isar'
+import 'main.dart'; // Para acessar a instância global 'isar'
 
 class DetailPage extends StatefulWidget {
   final Cfop cfopInicial;
@@ -24,11 +25,14 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   void _onToggleFavorite() async {
-    await DatabaseService().toggleFavorite(cfop);
+    // Adiciona o feedback tátil (vibração)
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(duration: 50);
+    }
     
-    // Recarrega o objeto diretamente do banco para garantir 100% de consistência
+    // O resto da lógica continua o mesmo
+    await DatabaseService().toggleCfopFavorite(cfop);
     final cfopDoBanco = await isar.cfops.get(cfop.id);
-    
     if (cfopDoBanco != null && mounted) {
       setState(() {
         cfop = cfopDoBanco;
@@ -75,7 +79,7 @@ class _DetailPageState extends State<DetailPage> {
             content: cfop.aplicacao.isNotEmpty ? cfop.aplicacao : 'Nenhuma aplicação prática cadastrada para este CFOP.',
           ),
           const SizedBox(height: 16),
-          _buildRelacionadosCard(), // O card de relacionados
+          _buildRelacionadosCard(),
           const SizedBox(height: 16),
           _buildInfoCard(
             icon: Icons.info_outline,
@@ -87,16 +91,11 @@ class _DetailPageState extends State<DetailPage> {
       ),
     );
   }
-  
-  // ================================================================
-  // FUNÇÃO DO CARD DE RELACIONADOS ATUALIZADA
-  // ================================================================
+
   Widget _buildRelacionadosCard() {
     if (cfop.relacionados.isEmpty) return const SizedBox.shrink();
-
     final pares = cfop.relacionados.split(',');
     final List<Widget> chips = [];
-
     for (var par in pares) {
       final partes = par.split(':');
       if (partes.length == 2) {
@@ -106,35 +105,19 @@ class _DetailPageState extends State<DetailPage> {
           ActionChip(
             avatar: const Icon(Icons.link, size: 16),
             label: Text('$tipo: $codigo'),
-            onPressed: () async { // A função agora é assíncrona
-              // Busca o CFOP correspondente no banco de dados local
-              final Cfop? cfopRelacionado = await isar.cfops
-                  .filter()
-                  .codigoEqualTo(codigo)
-                  .findFirst();
-
-              // Se encontrou, navega para uma nova tela de detalhes
+            onPressed: () async {
+              final Cfop? cfopRelacionado = await isar.cfops.filter().codigoEqualTo(codigo).findFirst();
               if (cfopRelacionado != null && mounted) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => DetailPage(cfopInicial: cfopRelacionado),
-                  ),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => DetailPage(cfopInicial: cfopRelacionado)));
               } else {
-                // Se não encontrou, mostra uma mensagem
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('CFOP $codigo não encontrado no banco de dados.')),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('CFOP $codigo não encontrado.')));
               }
             },
           )
         );
       }
     }
-
     if (chips.isEmpty) return const SizedBox.shrink();
-
     return _buildInfoCard(
       icon: Icons.sync_alt,
       iconColor: Colors.purple,
